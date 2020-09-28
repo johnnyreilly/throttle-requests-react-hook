@@ -1,88 +1,73 @@
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import { useAsync } from "react-use";
+import { useThrottleRequests } from "./useThrottleRequests";
 import "./App.css";
 
+// function timeout(ms: number) {
+//   return new Promise((resolve) => setTimeout(resolve, ms));
+// }
+
+function use10_000Requests(startedAt: string) {
+  const { throttle, updateThrottle } = useThrottleRequests();
+  const [progressMessage, setProgressMessage] = useState("not started");
+
+  useAsync(async() => {
+      if (!startedAt) return;
+
+      setProgressMessage("preparing");
+
+      const requestsToMake = Array.from(Array(10_000)).map(
+        (_, index) => async () => {
+          try {
+            setProgressMessage(`loading ${index}...`);
+
+            const response = await fetch(
+              `/manifest.json?querystringValueToPreventCaching=${startedAt}_request-${index}`
+            );
+            const json = await response.json();
+            updateThrottle.requestSucceededWithData(json);
+
+            return json;
+          } catch (error) {
+            updateThrottle.requestFailedWithError(error);
+            console.error(`failed to load ${index}`, error);
+          }
+        }
+      );
+
+      await updateThrottle.queueRequests(requestsToMake);
+
+  }, [startedAt, updateThrottle, setProgressMessage]);
+
+  return { throttle, progressMessage };
+}
+
 function App() {
-  // The owner and repo to query; we're going to default
-  // to using DefinitelyTyped as an example repo as it 
-  // is one of the most contributed to repos on GitHub
-  const [owner, setOwner] = useState("DefinitelyTyped");
-  const [repo, setRepo] = useState("DefinitelyTyped");
-  const handleOwnerChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) =>
-      setOwner(event.target.value),
-    [setOwner]
-  );
-  const handleRepoChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => setRepo(event.target.value),
-    [setRepo]
-  );
+  const [startedAt, setStartedAt] = useState("");
 
-  const contributorsUrl = `https://api.github.com/repos/${owner}/${repo}/contributors?per_page=100`;
-
-  const [contributorsUrlToLoad, setUrlToLoad] = useState("");
-  const contributors = useAsync(async () => {
-    if (!contributorsUrlToLoad) return;
-
-    // load contributors from GitHub
-    const response = await fetch(contributorsUrlToLoad);
-    const result: { url: string }[] = await response.json();
-
-    // For each entry in result, retrieve the given user from GitHub
-    const results = await Promise.all(
-      result.map(({ url }) => fetch(url).then((response) => response.json()))
-    );
-
-    return results;
-  }, [contributorsUrlToLoad]);
+  const { progressMessage, throttle } = use10_000Requests(startedAt);
 
   return (
     <div className="App">
       <header className="App-header">
-        <h1>Blogging devs</h1>
-        <div className="App-labelinput">
-          <label htmlFor="owner">GitHub Owner</label>
-          <input
-            id="owner"
-            type="text"
-            value={owner}
-            onChange={handleOwnerChange}
-          />
-        </div>
-        <div className="App-labelinput">
-          <label htmlFor="repo">GitHub Repo</label>
-          <input
-            id="repo"
-            type="text"
-            value={repo}
-            onChange={handleRepoChange}
-          />
-        </div>
-        <p>
-          <a
-            className="App-link"
-            href={contributorsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {contributorsUrl}
-          </a>
-        </p>
+        <h1>The HTTP request machine</h1>
         <button
           className="App-button"
-          onClick={(e) => setUrlToLoad(contributorsUrl)}
+          onClick={(_) => setStartedAt(new Date().toISOString())}
         >
-          Load contributors from GitHub
+          Make 10,000 requests
         </button>
-        {contributors.loading ? "Loading..." : null}
-        {contributors.error ? "Something went wrong" : null}
-        {contributors.value
-          ? contributors.value.map((cont) => (
-              <li>
-                {cont.login} - {cont.blog}
-              </li>
-            ))
-          : null}
+        {throttle.loading && <div>{progressMessage}</div>}
+        {throttle.values.length > 0 && (
+          <div className="App-results">
+            {throttle.values.length} requests completed successfully
+          </div>
+        )}
+        {throttle.errors.length > 0 && (
+          <div className="App-results">
+            {throttle.errors.length} requests errored
+          </div>
+        )}
       </header>
     </div>
   );

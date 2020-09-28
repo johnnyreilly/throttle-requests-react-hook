@@ -59,14 +59,13 @@ import React, { useState } from "react";
 import { useAsync } from "react-use";
 import "./App.css";
 
-function App() {
-  const [startedAt, setStartedAt] = useState("");
-  const contributors = useAsync(async () => {
+function use10_000Requests(startedAt: string) {
+  const responses = useAsync(async () => {
     if (!startedAt) return;
 
     // make 10,000 unique HTTP requests
     const results = await Promise.all(
-      Array.from(Array(10000)).map(async (_, index) => {
+      Array.from(Array(10_000)).map(async (_, index) => {
         const response = await fetch(
           `/manifest.json?querystringValueToPreventCaching=${startedAt}_request-${index}`
         );
@@ -78,6 +77,14 @@ function App() {
     return results;
   }, [startedAt]);
 
+  return responses;
+}
+
+
+function App() {
+  const [startedAt, setStartedAt] = useState("");
+  const responses = use10_000Requests(startedAt);
+
   return (
     <div className="App">
       <header className="App-header">
@@ -88,15 +95,13 @@ function App() {
         >
           Make 10,000 requests
         </button>
-        {contributors.loading ? "Loading..." : null}
-        {contributors.error ? "Something went wrong" : null}
-        {contributors.value ? (
+        {responses.loading && <div>{progressMessage}</div>}
+        {responses.error && <div>Something went wrong</div>}
+        {responses.value && (
           <div className="App-results">
-            {contributors.value.map((cont, index) => (
-              <div>{index}</div>
-            ))}
+            {responses.value.length} requests completed successfully
           </div>
-        ) : null}
+        )}
       </header>
     </div>
   );
@@ -107,7 +112,7 @@ export default App;
 
 The app that we've built is very simple; it's a button which, when you press it, fires 10,000 HTTP requests in parallel using the [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).  In this case we're not interested in the results of these HTTP requests; rather we're interested in how the browser copes with this approach. (Spoiler: not well!)  Running the app with Devtools open results in the following unhappy affair:
 
-![](i-want-it-all.gif)
+![chrome weeping softly](i-want-it-all.gif)
 
 The GIF above has actually been edited significantly for length. In reality it took 20 seconds on my machine for the first request to be fired, prior to that Chrome was unresponsive. When requests do start to fire, a significant number fail with `net::ERR_INSUFFICIENT_RESOURCES`.  Further to that, those requests that are fired sit in "Stalled" state prior to being executed.  This is a consequence of [Chrome obeying it's queueing rules for HTTP requests](https://developers.google.com/web/tools/chrome-devtools/network/reference#timing):
 
@@ -115,9 +120,326 @@ The GIF above has actually been edited significantly for length. In reality it t
 
 In summary, the problems with our current approach are:
 
-- the browser becoming unresponsive
-- failing HTTP requests due to insufficient resources
-- no information displayable to the user around progress
+1. the browser becoming unresponsive
+2. failing HTTP requests due to insufficient resources
+3. no information displayable to the user around progress
+
+## Throttle me this
+
+Instead of hammering the browser by firing all the requests at once, we could instead implement a throttle.  A throttle is a mechanism which allows you to limit the rate at which operations are performed.  In this case we want to limit the rate at which HTTP requests are made. A throttle will tackle problems 1 and 2 - essentially keeping the browser free and easy and ensuring that requests are all successfully sent.  We also want to keep our users informed around how progress is going.  It's time to unveil the `useThrottleRequests` hook:
+
+```ts
+import { useMemo, useReducer } from "react";
+import { AsyncState } from "react-use/lib/useAsync";
+
+/** Function which makes a request */
+export type RequestToMake = () => Promise<void>;
+
+/**
+ * Given an array of requestsToMake and a limit on the number of max parallel requests
+ * queue up those requests and start firing them
+ * - inspired by Rafael Xavier's approach here: https://stackoverflow.com/a/48007240/761388
+ *
+ * @param requestsToMake
+ * @param maxParallelRequests the maximum number of requests to make - defaults to 6
+ */
+async function throttleRequests(
+  requestsToMake: RequestToMake[],
+  maxParallelRequests = 6
+) {
+  // queue up simultaneous calls
+  const queue: Promise<void>[] = [];
+  for (let requestToMake of requestsToMake) {
+    // fire the async function, add its promise to the queue,
+    // and remove it from queue when complete
+    const promise = requestToMake().then((res) => {
+      queue.splice(queue.indexOf(promise), 1);
+      return res;
+    });
+    queue.push(promise);
+
+    // if the number of queued requests matches our limit then
+    // wait for one to finish before enqueueing more
+    if (queue.length >= maxParallelRequests) {
+      await Promise.race(queue);
+    }
+  }
+  // wait for the rest of the calls to finish
+  await Promise.all(queue);
+}
+
+/**
+ * The state that represents the progress in processing throttled requests
+ */
+export type ThrottledProgress<TData> = {
+  /** the number of requests that will be made */
+  totalRequests: number;
+  /** the errors that came from failed requests */
+  errors: Error[];
+  /** the responses that came from successful requests */
+  values: TData[];
+  /** a value between 0 and 100 which represents the percentage of request that have been completed (whether successfully or not) */
+  percentageLoaded: number;
+  /** whether the throttle is currently processing requests */
+  loading: boolean;
+};
+
+function createThrottledProgress<TData>(
+  totalRequests: number
+): ThrottledProgress<TData> {
+  return {
+    totalRequests,
+    percentageLoaded: 0,
+    loading: false,
+    errors: [],
+    values: [],
+  };
+}
+
+/**
+ * A reducing function which takes the supplied `ThrottledProgress` and applies a new value to it
+ */
+function updateThrottledProgress<TData>(
+  currentProgress: ThrottledProgress<TData>,
+  newData: AsyncState<TData>
+): ThrottledProgress<TData> {
+  const errors = newData.error
+    ? [...currentProgress.errors, newData.error]
+    : currentProgress.errors;
+
+  const values = newData.value
+    ? [...currentProgress.values, newData.value]
+    : currentProgress.values;
+
+  const percentageLoaded =
+    currentProgress.totalRequests === 0
+      ? 0
+      : Math.round(
+          ((errors.length + values.length) / currentProgress.totalRequests) * 100
+        );
+
+  const loading =
+    currentProgress.totalRequests === 0
+      ? false
+      : errors.length + values.length < currentProgress.totalRequests;
+
+  return {
+    totalRequests: currentProgress.totalRequests,
+    loading,
+    percentageLoaded,
+    errors,
+    values,
+  };
+}
+
+type ThrottleActions<TValue> =
+  | {
+      type: "initialise";
+      totalRequests: number;
+    }
+  | {
+      type: "requestSuccess";
+      value: TValue;
+    }
+  | {
+      type: "requestFailed";
+      error: Error;
+    };
+
+/**
+ * Create a ThrottleRequests and an updater
+ */
+export function useThrottleRequests<TValue>() {
+  function reducer(
+    throttledProgressAndState: ThrottledProgress<TValue>,
+    action: ThrottleActions<TValue>
+  ): ThrottledProgress<TValue> {
+    switch (action.type) {
+      case "initialise":
+        return createThrottledProgress(action.totalRequests);
+
+      case "requestSuccess":
+        return updateThrottledProgress(throttledProgressAndState, {
+          loading: false,
+          value: action.value,
+        });
+
+      case "requestFailed":
+        return updateThrottledProgress(throttledProgressAndState, {
+          loading: false,
+          error: action.error,
+        });
+    }
+  }
+
+  const [throttle, dispatch] = useReducer(
+    reducer,
+    createThrottledProgress<TValue>(/** totalRequests */ 0)
+  );
+
+  const updateThrottle = useMemo(() => {
+    /**
+     * Update the throttle with a successful request
+     * @param values from request
+     */
+    function requestSucceededWithData(value: TValue) {
+      return dispatch({
+        type: "requestSuccess",
+        value,
+      });
+    }
+
+    /**
+     * Update the throttle upon a failed request with an error message
+     * @param error error
+     */
+    function requestFailedWithError(error: Error) {
+      return dispatch({
+        type: "requestFailed",
+        error,
+      });
+    }
+
+    /**
+     * Given an array of requestsToMake and a limit on the number of max parallel requests
+     * queue up those requests and start firing them
+     * - based upon https://stackoverflow.com/a/48007240/761388
+     *
+     * @param requestsToMake
+     * @param maxParallelRequests the maximum number of requests to make - defaults to 6
+     */
+    function queueRequests(
+      requestsToMake: RequestToMake[],
+      maxParallelRequests = 6
+    ) {
+      dispatch({
+        type: "initialise",
+        totalRequests: requestsToMake.length,
+      });
+
+      return throttleRequests(requestsToMake, maxParallelRequests);
+    }
+
+    return {
+      queueRequests,
+      requestSucceededWithData,
+      requestFailedWithError,
+    };
+  }, [dispatch]);
+
+  return {
+    throttle,
+    updateThrottle,
+  };
+}
+```
+
+The `useThrottleRequests` hook returns 2 properties:
+
+- `throttle` - a `ThrottledProgress<TData>` that contains how far through the number of requests being made we are including the responses and errors obtained.
+- `updateThrottle` - an object which exposes 3 functions:
+  - `queueRequests` - the function to which you pass the requests that should be queued and executed in a throttled fashion
+  - `requestSucceededWithData` - the function which is called if a request succeeds to provide the data
+  - `requestFailedWithError` - the function which is called if a request fails to provide the error
+
+That's a lot of words to describe our `useThrottleRequests` hook.  Let's look at what it looks like by migrating our `use10_000Requests` hook to (no pun intended) use it. Here's a new implementation of `App.tsx`:
+
+```tsx
+import React, { useState } from "react";
+import { useAsync } from "react-use";
+import { useThrottleRequests } from "./useThrottleRequests";
+import "./App.css";
+
+function use10_000Requests(startedAt: string) {
+  const { throttle, updateThrottle } = useThrottleRequests();
+  const [progressMessage, setProgressMessage] = useState("not started");
+
+  useAsync(async() => {
+      if (!startedAt) return;
+
+      setProgressMessage("preparing");
+
+      const requestsToMake = Array.from(Array(10_000)).map(
+        (_, index) => async () => {
+          try {
+            setProgressMessage(`loading ${index}...`);
+
+            const response = await fetch(
+              `/manifest.json?querystringValueToPreventCaching=${startedAt}_request-${index}`
+            );
+            const json = await response.json();
+            updateThrottle.requestSucceededWithData(json);
+
+            return json;
+          } catch (error) {
+            updateThrottle.requestFailedWithError(error);
+            console.error(`failed to load ${index}`, error);
+          }
+        }
+      );
+
+      await updateThrottle.queueRequests(requestsToMake);
+
+  }, [startedAt, updateThrottle, setProgressMessage]);
+
+  return { throttle, progressMessage };
+}
+
+function App() {
+  const [startedAt, setStartedAt] = useState("");
+
+  const { progressMessage, throttle } = use10_000Requests(startedAt);
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>The HTTP request machine</h1>
+        <button
+          className="App-button"
+          onClick={(_) => setStartedAt(new Date().toISOString())}
+        >
+          Make 10,000 requests
+        </button>
+        {throttle.loading && <div>{progressMessage}</div>}
+        {throttle.values.length > 0 && (
+          <div className="App-results">
+            {throttle.values.length} requests completed successfully
+          </div>
+        )}
+        {throttle.errors.length > 0 && (
+          <div className="App-results">
+            {throttle.errors.length} requests errored
+          </div>
+        )}
+      </header>
+    </div>
+  );
+}
+
+export default App;
+```
+
+Looking at the new `use10_000Requests` hook, there's a few subtle differences to our prior implementation.  First of all, we're now exposing the `throttle`; a `ThrottleProgress<TData>` which exposes the following information:
+
+- `totalRequests` - the number of requests that will be made
+- `errors` - the errors that came from failed requests
+- `values` - the responses that came from successful requests
+- `percentageLoaded` - a value between 0 and 100 which represents the percentage of request that have been completed (whether successfully or not)
+- `loading` - whether the throttle is currently processing requests
+
+Our updated hook also exposes a `progressMessage` which is a simple string stored with `useState` that we update as our throttle runs.  In truth the information being surfaced in this case isn't that interesting.  This is in place just to illustrate that you could capture some data from your requests as they complete for display purposes; a running total for instance.
+
+So, how does our new hook approach perform?
+
+![chrome coping well](i-want-it-all-with-hook.gif)
+
+If we look back at the problems we faced with the prior approach, how do we look?
+
+1. ~~the browser becoming unresponsive~~ - the browser remains responsive.
+2. ~~failing HTTP requests due to insufficient resources~~ - the browser does not experience failing HTTP requests.
+3. ~~no information displayable to the user around progress~~ - details of progress are displayed to the user throughout.
+
+
 
 
 ## What shall we build?
