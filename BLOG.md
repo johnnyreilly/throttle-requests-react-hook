@@ -11,6 +11,115 @@ This need presents two interesting problems to solve:
 
 This post will talk about how we can tackle these and demonstrate using a custom React Hook.
 
+## Let's bring Chrome to its knees
+
+We'll begin our journey by spinning up a TypeScript React app with [Create React App](https://create-react-app.dev/):
+
+```shell
+npx create-react-app throttle-requests-react-hook --template typescript
+```
+
+Because we're going to be making a number of asynchronous calls, we're going to simplify the code by leaning on the widely used [`react-use`](https://github.com/streamich/react-use) for a [`useAsync`](https://github.com/streamich/react-use/blob/master/docs/useAsync.md) hook.
+
+```shell
+cd throttle-requests-react-hook
+yarn add react-use
+```
+
+We'll add the following to the `App.css` file:
+
+```css
+
+.App-labelinput > * {
+  margin: 1em;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+.App-button {
+  font-size: calc(10px + 2vmin);
+  padding: 1em;
+  background-color: cornflowerblue;
+  color: #ffffff;
+  text-align: center;
+}
+
+.App-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill,minmax(160px, 1fr));
+}
+```
+
+Then we'll replace the `App.tsx` contents with this:
+
+```tsx
+import React, { useState } from "react";
+import { useAsync } from "react-use";
+import "./App.css";
+
+function App() {
+  const [startedAt, setStartedAt] = useState("");
+  const contributors = useAsync(async () => {
+    if (!startedAt) return;
+
+    // make 10,000 unique HTTP requests
+    const results = await Promise.all(
+      Array.from(Array(10000)).map(async (_, index) => {
+        const response = await fetch(
+          `/manifest.json?querystringValueToPreventCaching=${startedAt}_request-${index}`
+        );
+        const json = await response.json();
+        return json;
+      })
+    );
+
+    return results;
+  }, [startedAt]);
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>The HTTP request machine</h1>
+        <button
+          className="App-button"
+          onClick={(_) => setStartedAt(new Date().toISOString())}
+        >
+          Make 10,000 requests
+        </button>
+        {contributors.loading ? "Loading..." : null}
+        {contributors.error ? "Something went wrong" : null}
+        {contributors.value ? (
+          <div className="App-results">
+            {contributors.value.map((cont, index) => (
+              <div>{index}</div>
+            ))}
+          </div>
+        ) : null}
+      </header>
+    </div>
+  );
+}
+
+export default App;
+```
+
+The app that we've built is very simple; it's a button which, when you press it, fires 10,000 HTTP requests in parallel using the [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).  In this case we're not interested in the results of these HTTP requests; rather we're interested in how the browser copes with this approach. (Spoiler: not well!)  Running the app with Devtools open results in the following unhappy affair:
+
+![](i-want-it-all.gif)
+
+The GIF above has actually been edited significantly for length. In reality it took 20 seconds on my machine for the first request to be fired, prior to that Chrome was unresponsive. When requests do start to fire, a significant number fail with `net::ERR_INSUFFICIENT_RESOURCES`.  Further to that, those requests that are fired sit in "Stalled" state prior to being executed.  This is a consequence of [Chrome obeying it's queueing rules for HTTP requests](https://developers.google.com/web/tools/chrome-devtools/network/reference#timing):
+
+> There are already six TCP connections open for this origin, which is the limit. Applies to HTTP/1.0 and HTTP/1.1 only.
+
+In summary, the problems with our current approach are:
+
+- the browser becoming unresponsive
+- failing HTTP requests due to insufficient resources
+- no information displayable to the user around progress
+
+
 ## What shall we build?
 
 Let us consider a batch loading scenario we might want to tackle.  We're going to build an application which, given a repo on GitHub, lists all the contributors blogs.
@@ -75,19 +184,6 @@ We can build this thanks to the excellent [GitHub REST API](https://docs.github.
 ```
 
 ## Blogging devs v1.0
-
-Let's start our journey by spinning up a TypeScript React app with [Create React App](https://create-react-app.dev/):
-
-```shell
-npx create-react-app throttle-requests-react-hook --template typescript
-```
-
-Because we're going to be making a number of asynchronous calls, we're going to simplify the code by leaning on the widely used [`react-use`](https://github.com/streamich/react-use) for a [`useAsync`](https://github.com/streamich/react-use/blob/master/docs/useAsync.md) hook.
-
-```shell
-cd throttle-requests-react-hook
-yarn add react-use
-```
 
 Finally let's replace the existing `App.tsx` with:
 
