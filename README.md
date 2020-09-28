@@ -139,19 +139,19 @@ function App() {
 export default App;
 ```
 
-The app that we've built is very simple; it's a button which, when you press it, fires 10,000 HTTP requests in parallel using the [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).  The data being requested in this case is an arbitrary JSON file; the `manifest.json` in this case.  If you look closely you'll see we're doing some querystring tricks with our URL to avoid getting cached data.
+The app that we've built is very simple; it's a button which, when you press it, fires 10,000 HTTP requests in parallel using the [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).  The data being requested in this case is an arbitrary JSON file; the `manifest.json`.  If you look closely you'll see we're doing some querystring tricks with our URL to avoid getting cached data.
  
-In fact, for this demo we're not interested in the results of these HTTP requests; rather we're interested in how the browser copes with this approach. (Spoiler: not well!) It's worth considering that a browser requesting a text file from the a server running on the same machine as the browser is likely to be as performant as it gets.
+In fact, for this demo we're not interested in the results of these HTTP requests; rather we're interested in how the browser copes with this approach. (Spoiler: not well!) It's worth considering that requesting a text file from a server running on the same machine as the browser should be fast.
 
 So we'll run `yarn start` and got to http://localhost:3000 to get to the app. Running with Devtools open results in the following unhappy affair:
 
 ![chrome weeping softly](i-want-it-all.gif)
 
-The GIF above has actually been edited significantly for length. In reality it took 20 seconds on my machine for the first request to be fired, prior to that Chrome was unresponsive. When requests do start to fire, a significant number fail with `net::ERR_INSUFFICIENT_RESOURCES`.  Further to that, those requests that are fired sit in "Stalled" state prior to being executed.  This is a consequence of [Chrome obeying it's queueing rules for HTTP requests](https://developers.google.com/web/tools/chrome-devtools/network/reference#timing):
+The GIF above has actually been edited significantly for length. In reality it took 20 seconds for the first request to be fired, prior to that Chrome was unresponsive. When requests do start to fire, a significant number fail with `net::ERR_INSUFFICIENT_RESOURCES`.  Further to that, those requests that are fired sit in "Stalled" state prior to being executed.  This is a consequence of [Chrome limiting the number of connections - all browsers do this](https://developers.google.com/web/tools/chrome-devtools/network/reference#timing):
 
 > There are already six TCP connections open for this origin, which is the limit. Applies to HTTP/1.0 and HTTP/1.1 only.
 
-In summary, the problems with our current approach are:
+In summary, the problems with the current approach are:
 
 1. the browser becoming unresponsive
 2. failing HTTP requests due to insufficient resources
@@ -457,7 +457,7 @@ function App() {
 export default App;
 ```
 
-Looking at the new `use10_000Requests` hook, there's a few subtle differences to our prior implementation.  First of all, we're now exposing the `throttle`; a `ThrottleProgress<TData>`. Our updated hook also exposes a `progressMessage` which is a simple string stored with `useState` that we update as our throttle runs.  In truth the information being surfaced in this case isn't that interesting.  This is in place just to illustrate that you could capture some data from your requests as they complete for display purposes; a running total for instance.
+Looking at the new `use10_000Requests` hook, there's a few subtle differences to our prior implementation.  First of all, we're now exposing the `throttle`; a `ThrottleProgress<TData>`. Our updated hook also exposes a `progressMessage` which is a simple `string` stored with `useState` that we update as our throttle runs.  In truth the information being surfaced here isn't that interesting.  The `progressMessage` is in place just to illustrate that you could capture some data from your requests as they complete for display purposes; a running total for instance.
 
 So, how does our new hook approach perform?
 
@@ -684,3 +684,8 @@ Just to make the demo a little clearer we've artificially slowed the duration of
 
 ![blogging devs](blogging-devs.gif)
 
+We have built a React Hook which allows us to:
+
+- gradually load data
+- without blocking the UI of the browser
+- and which provides progress data to keep users informed.
