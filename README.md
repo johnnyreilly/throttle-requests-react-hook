@@ -143,11 +143,11 @@ The app that we've built is very simple; it's a button which, when you press it,
  
 In fact, for this demo we're not interested in the results of these HTTP requests; rather we're interested in how the browser copes with this approach. (Spoiler: not well!) It's worth considering that requesting a text file from a server running on the same machine as the browser should be fast.
 
-So we'll run `yarn start` and got to http://localhost:3000 to get to the app. Running with Devtools open results in the following unhappy affair:
+So we'll run `yarn start` and go to http://localhost:3000 to get to the app. Running with Devtools open results in the following unhappy affair:
 
 ![chrome weeping softly](i-want-it-all.gif)
 
-The GIF above has actually been edited significantly for length. In reality it took 20 seconds for the first request to be fired, prior to that Chrome was unresponsive. When requests do start to fire, a significant number fail with `net::ERR_INSUFFICIENT_RESOURCES`.  Further to that, those requests that are fired sit in "Stalled" state prior to being executed.  This is a consequence of [Chrome limiting the number of connections - all browsers do this](https://developers.google.com/web/tools/chrome-devtools/network/reference#timing):
+The GIF above has been edited significantly for length. In reality it took 20 seconds for the first request to be fired, prior to that Chrome was unresponsive. When requests did start to fire, a significant number failed with `net::ERR_INSUFFICIENT_RESOURCES`.  Further to that, those requests that were fired sat in "Stalled" state prior to being executed.  This is a consequence of [Chrome limiting the number of connections - all browsers do this](https://developers.google.com/web/tools/chrome-devtools/network/reference#timing):
 
 > There are already six TCP connections open for this origin, which is the limit. Applies to HTTP/1.0 and HTTP/1.1 only.
 
