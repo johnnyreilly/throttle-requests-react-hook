@@ -1,12 +1,12 @@
 # Throttling data requests with React Hooks
 
-Typically when loading data in application relatively few HTTP requests will be made.  For example, if we imagine we're making a student administration application, then an "view" screen might make a single HTTP request to load that student's data before displaying it.
+When an application loads data, typically relatively few HTTP requests will be made.  For example, if we imagine we're making a student administration application, then an "view" screen might make a single HTTP request to load that student's data before displaying it.
 
-Whilst it's not the typical use case, occasionally there's a need for an application to make a large number of HTTP requests.  Imagine perhaps a reporting application which loads data and then aggregates it for presentation purposes.
+Occasionally there's a need for an application to make a large number of HTTP requests.  Consider a reporting application which loads data and then aggregates it for presentation purposes.
 
 This need presents two interesting problems to solve:
 
-1. how do we queue requests?
+1. how do we load data gradually?
 2. how do we present loading progress to users?
 
 This post will talk about how we can tackle these and demonstrate using a custom React Hook.
@@ -110,7 +110,11 @@ function App() {
 export default App;
 ```
 
-The app that we've built is very simple; it's a button which, when you press it, fires 10,000 HTTP requests in parallel using the [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).  In this case we're not interested in the results of these HTTP requests; rather we're interested in how the browser copes with this approach. (Spoiler: not well!)  Running the app with Devtools open results in the following unhappy affair:
+The app that we've built is very simple; it's a button which, when you press it, fires 10,000 HTTP requests in parallel using the [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).  The data being requested in this case is an arbitrary JSON file; the manifest.json in this case.  If you look closely you'll see we're doing some querystring tricks with our URL to avoid getting cached data.
+ 
+In fact, for this demo we're not interested in the results of these HTTP requests; rather we're interested in how the browser copes with this approach. (Spoiler: not well!) It's worth considering that a browser requesting a text file from the a server running on the same machine as the browser is likely to be as performant as it gets.
+
+So we'll run `yarn start` and got to http://localhost:3000 to get to the app. Running with Devtools open results in the following unhappy affair:
 
 ![chrome weeping softly](i-want-it-all.gif)
 
