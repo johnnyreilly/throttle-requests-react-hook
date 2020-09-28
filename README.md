@@ -26,12 +26,27 @@ cd throttle-requests-react-hook
 yarn add react-use
 ```
 
-We'll add the following to the `App.css` file:
+We'll replace the `App.css` file with this:
 
 ```css
+.App {
+  text-align: center;
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
 
 .App-labelinput > * {
-  margin: 1em;
+  margin: 0.5em;
+  font-size:24px;
 }
 
 .App-link {
@@ -40,15 +55,29 @@ We'll add the following to the `App.css` file:
 
 .App-button {
   font-size: calc(10px + 2vmin);
+  margin-top: 0.5em;
   padding: 1em;
   background-color: cornflowerblue;
   color: #ffffff;
   text-align: center;
 }
 
+.App-progress {
+  padding: 1em;
+  background-color: cadetblue;
+  color: #ffffff;
+}
+
 .App-results {
-  display: grid;
-  grid-template-columns: repeat(auto-fill,minmax(160px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.App-results > * {
+  padding: 1em;
+  margin: 0.5em;
+  background-color: darkblue;
+  flex: 1 1 300px;
 }
 ```
 
@@ -340,11 +369,11 @@ export function useThrottleRequests<TValue>() {
 
 The `useThrottleRequests` hook returns 2 properties:
 
-- `throttle` - a `ThrottledProgress<TData>` that contains how far through the number of requests being made we are including the responses and errors obtained.
+- `throttle` - a `ThrottledProgress<TData>` that contains the following data:
   - `totalRequests` - the number of requests that will be made
   - `errors` - the errors that came from failed requests
   - `values` - the responses that came from successful requests
-  - `percentageLoaded` - a value between 0 and 100 which represents the percentage of request that have been completed (whether successfully or not)
+  - `percentageLoaded` - a value between 0 and 100 which represents the percentage of requests that have been completed (whether successfully or not)
   - `loading` - whether the throttle is currently processing requests
 
 - `updateThrottle` - an object which exposes 3 functions:
@@ -378,12 +407,11 @@ function use10_000Requests(startedAt: string) {
               `/manifest.json?querystringValueToPreventCaching=${startedAt}_request-${index}`
             );
             const json = await response.json();
-            updateThrottle.requestSucceededWithData(json);
 
-            return json;
+            updateThrottle.requestSucceededWithData(json);
           } catch (error) {
-            updateThrottle.requestFailedWithError(error);
             console.error(`failed to load ${index}`, error);
+            updateThrottle.requestFailedWithError(error);
           }
         }
       );
@@ -435,18 +463,17 @@ So, how does our new hook approach perform?
 
 ![chrome coping well](i-want-it-all-with-hook.gif)
 
-If we look back at the problems we faced with the prior approach, how do we look?
+Very well indeed!  Please note that the above GIF has again been edited for brevity.  If we look back at the problems we faced with the prior approach, how do we compare?
 
 1. ~~the browser becoming unresponsive~~ - the browser remains responsive.
 2. ~~failing HTTP requests due to insufficient resources~~ - the browser does not experience failing HTTP requests.
 3. ~~no information displayable to the user around progress~~ - details of progress are displayed to the user throughout.
 
-
-
+Tremendous!
 
 ## What shall we build?
 
-Let us consider a batch loading scenario we might want to tackle.  We're going to build an application which, given a repo on GitHub, lists all the contributors blogs.
+Our current example is definitely contrived.  Let's try and apply our `useThrottleRequests` hook to a more realistic scenario.  We're going to build an application which, given a repo on GitHub, lists all the contributors blogs.  (You can specify a blog URL on your GitHub profile; many people use this to specify their Twitter profile.)
 
 We can build this thanks to the excellent [GitHub REST API](https://docs.github.com/en/free-pro-team@latest/rest). It exposes two endpoints of interest given our goal.
 
@@ -468,57 +495,81 @@ We can build this thanks to the excellent [GitHub REST API](https://docs.github.
 
 ### 2. Get a user
 
-[Get a user](https://docs.github.com/en/free-pro-team@latest/rest/reference/users#get-a-user) is the API that the `url` property above is referring to.  When called it returns an object the publicly available information about a user:
+[Get a user](https://docs.github.com/en/free-pro-team@latest/rest/reference/users#get-a-user) is the API that the `url` property above is referring to.  When called it returns an object representing the publicly available information about a user:
 
 ```js
 {
-    "login": "octocat",
-    "id": 583231,
-    "node_id": "MDQ6VXNlcjU4MzIzMQ==",
-    "avatar_url": "https://avatars3.githubusercontent.com/u/583231?v=4",
-    "gravatar_id": "",
-    "url": "https://api.github.com/users/octocat",
-    "html_url": "https://github.com/octocat",
-    "followers_url": "https://api.github.com/users/octocat/followers",
-    "following_url": "https://api.github.com/users/octocat/following{/other_user}",
-    "gists_url": "https://api.github.com/users/octocat/gists{/gist_id}",
-    "starred_url": "https://api.github.com/users/octocat/starred{/owner}{/repo}",
-    "subscriptions_url": "https://api.github.com/users/octocat/subscriptions",
-    "organizations_url": "https://api.github.com/users/octocat/orgs",
-    "repos_url": "https://api.github.com/users/octocat/repos",
-    "events_url": "https://api.github.com/users/octocat/events{/privacy}",
-    "received_events_url": "https://api.github.com/users/octocat/received_events",
-    "type": "User",
-    "site_admin": false,
-    "name": "The Octocat",
-    "company": "@github",
-    "blog": "https://github.blog",
-    "location": "San Francisco",
-    "email": null,
-    "hireable": null,
-    "bio": null,
-    "twitter_username": null,
-    "public_repos": 8,
-    "public_gists": 8,
-    "followers": 3255,
-    "following": 9,
-    "created_at": "2011-01-25T18:44:36Z",
-    "updated_at": "2020-09-25T14:02:08Z"
+  // ...
+  "name": "The Octocat",
+  // ...
+  "blog": "https://github.blog",
+  // ...
 }
 ```
 
 ## Blogging devs v1.0
 
-Finally let's replace the existing `App.tsx` with:
+We're now ready to build our blogging devs app; let's replace the existing `App.tsx` with:
 
 ```tsx
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useAsync } from "react-use";
+import { useThrottleRequests } from "./useThrottleRequests";
 import "./App.css";
+
+type GitHubUser = { name: string; blog?: string };
+
+function timeout(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function useContributors(contributorsUrlToLoad: string) {
+  const { throttle, updateThrottle } = useThrottleRequests<GitHubUser>();
+  const [progressMessage, setProgressMessage] = useState("");
+
+  useAsync(async () => {
+    if (!contributorsUrlToLoad) return;
+
+    setProgressMessage("loading contributors");
+
+    // load contributors from GitHub
+    const contributorsResponse = await fetch(contributorsUrlToLoad);
+    const contributors: { url: string }[] = await contributorsResponse.json();
+
+    setProgressMessage(`loading ${contributors.length} contributors...`);
+
+    // For each entry in result, retrieve the given user from GitHub
+    const requestsToMake = contributors.map(({ url }, index) => async () => {
+      try {
+        setProgressMessage(
+          `loading ${index} / ${contributors.length}: ${url}...`
+        );
+
+        const response = await fetch(url);
+        const json: GitHubUser = await response.json();
+
+        // wait for 1 second before completing the request
+        // - makes for better demos
+        await timeout(1000);
+
+        updateThrottle.requestSucceededWithData(json);
+      } catch (error) {
+        console.error(`failed to load ${url}`, error);
+        updateThrottle.requestFailedWithError(error);
+      }
+    });
+
+    await updateThrottle.queueRequests(requestsToMake);
+
+    setProgressMessage("");
+  }, [contributorsUrlToLoad, updateThrottle, setProgressMessage]);
+
+  return { throttle, progressMessage };
+}
 
 function App() {
   // The owner and repo to query; we're going to default
-  // to using DefinitelyTyped as an example repo as it 
+  // to using DefinitelyTyped as an example repo as it
   // is one of the most contributed to repos on GitHub
   const [owner, setOwner] = useState("DefinitelyTyped");
   const [repo, setRepo] = useState("DefinitelyTyped");
@@ -535,25 +586,31 @@ function App() {
   const contributorsUrl = `https://api.github.com/repos/${owner}/${repo}/contributors`;
 
   const [contributorsUrlToLoad, setUrlToLoad] = useState("");
-  const contributors = useAsync(async () => {
-    if (!contributorsUrlToLoad) return;
+  const { progressMessage, throttle } = useContributors(contributorsUrlToLoad);
 
-    // load contributors from GitHub
-    const response = await fetch(contributorsUrlToLoad);
-    const result: { url: string }[] = await response.json();
-
-    // For each entry in result, retrieve the given user from GitHub
-    const results = await Promise.all(
-      result.map(({ url }) => fetch(url).then((response) => response.json()))
-    );
-
-    return results;
-  }, [contributorsUrlToLoad]);
+  const bloggers = useMemo(
+    () => throttle.values.filter((contributor) => contributor.blog),
+    [throttle]
+  );
 
   return (
     <div className="App">
       <header className="App-header">
         <h1>Blogging devs</h1>
+
+        <p>
+          Show me the{" "}
+          <a
+            className="App-link"
+            href={contributorsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            contributors for {owner}/{repo}
+          </a>{" "}
+          who have blogs.
+        </p>
+
         <div className="App-labelinput">
           <label htmlFor="owner">GitHub Owner</label>
           <input
@@ -562,8 +619,6 @@ function App() {
             value={owner}
             onChange={handleOwnerChange}
           />
-        </div>
-        <div className="App-labelinput">
           <label htmlFor="repo">GitHub Repo</label>
           <input
             id="repo"
@@ -572,31 +627,44 @@ function App() {
             onChange={handleRepoChange}
           />
         </div>
-        <p>
-          <a
-            className="App-link"
-            href={contributorsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {contributorsUrl}
-          </a>
-        </p>
+
         <button
           className="App-button"
           onClick={(e) => setUrlToLoad(contributorsUrl)}
         >
-          Load contributors from GitHub
+          Load bloggers from GitHub
         </button>
-        {contributors.loading ? "Loading..." : null}
-        {contributors.error ? "Something went wrong" : null}
-        {contributors.value
-          ? contributors.value.map((cont) => (
-              <li>
-                {cont.login} - {cont.blog}
-              </li>
-            ))
-          : null}
+
+        {progressMessage && (
+          <div className="App-progress">{progressMessage}</div>
+        )}
+
+        {throttle.percentageLoaded > 0 && (
+          <>
+            <h3>Behold {bloggers.length} bloggers:</h3>
+            <div className="App-results">
+              {bloggers.map((blogger) => (
+                <div key={blogger.name}>
+                  <div>{blogger.name}</div>
+                  <a
+                    className="App-link"
+                    href={blogger.blog}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {blogger.blog}
+                  </a>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {throttle.errors.length > 0 && (
+          <div className="App-results">
+            {throttle.errors.length} requests errored
+          </div>
+        )}
       </header>
     </div>
   );
@@ -605,21 +673,14 @@ function App() {
 export default App;
 ```
 
+The application gives users the opportunity to enter the organisation and repository of a GitHub project.  Then, when the button is clicked, it:
 
-#### Browser limitations
+- loads the contributors
+- for each contributor it loads the individual user (separate HTTP request for each)
+- as it loads it communicates how far through the loading progress it has got
+- as users are loaded, it renders a tile for each user with a listed blog
 
-The simplest approach to tacking making multiple requests 
+Just to make the demo a little clearer we've artificially slowed the duration of each request by a second.  What does it look like when you put it together?  Well like this:
 
-https://stackoverflow.com/questions/985431/max-parallel-http-connections-in-a-browser
+![blogging devs](blogging-devs.gif)
 
-
-
-Recently I started to hit the limits of what our servers could sensibly cater for in a request.  Not in terms of amounts of data surfaced; rather in terms of the length of time it was taking for requests to come back.  What had previously (back in the days when no-one used our services) worked in a matter of seconds had miraculously grown into something that took minutes instead.  Oh to be popular!
-
-I decided to implement a throttle mechanism to handle this.  The idea being to break down each previously large request into batches of short requests that, when the responses were brought together, would represent the same data as our previous large request was retrieving.
-
-This mechanism would ease the load on the server. It was also have a secondary (and lovely) effect.  It would provide a way by which we could provide a meaningful progress indicator to clients. If you know that you're going to load 900 requests and you know how many of those requests have been completed, then you have all you need to provide a "percentage done" mechanism.
-
-#### Batch loading with React Hooks
-
-My front end was a React application; entirely comprised of hooks.  The question I found myself pondering was this: what does a batch loading mechanism look like in hooks? Well, our data loading mechanism had already been abstracted into a hook.  Our hooks already built atop [`react-use`'s `AsyncState<T>`](https://github.com/streamich/react-use/blob/master/src/useAsyncFn.ts) which models the state surrounding an asynchronous operation such as loading data in a really lovely way.

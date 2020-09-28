@@ -14,7 +14,8 @@
 }
 
 .App-labelinput > * {
-  margin: 1em;
+  margin: 0.5em;
+  font-size:24px;
 }
 
 .App-link {
@@ -23,13 +24,27 @@
 
 .App-button {
   font-size: calc(10px + 2vmin);
+  margin-top: 0.5em;
   padding: 1em;
   background-color: cornflowerblue;
   color: #ffffff;
   text-align: center;
 }
 
+.App-progress {
+  padding: 1em;
+  background-color: cadetblue;
+  color: #ffffff;
+}
+
 .App-results {
-  display: grid;
-  grid-template-columns: repeat(auto-fill,minmax(160px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.App-results > * {
+  padding: 1em;
+  margin: 0.5em;
+  background-color: darkblue;
+  flex: 1 1 300px;
 }
