@@ -143,7 +143,7 @@ The app that we've built is very simple; it's a button which, when you press it,
  
 In fact, for this demo we're not interested in the results of these HTTP requests; rather we're interested in how the browser copes with this approach. (Spoiler: not well!) It's worth considering that requesting a text file from a server running on the same machine as the browser should be fast.
 
-So we'll run `yarn start` and got to http://localhost:3000 to get to the app. Running with Devtools open results in the following unhappy affair:
+So we'll run `yarn start` and go to http://localhost:3000 to get to the app. Running with Devtools open results in the following unhappy affair:
 
 ![chrome weeping softly](i-want-it-all.gif)
 
