@@ -47,7 +47,7 @@ export type ThrottledProgress<TData> = {
   errors: Error[];
   /** the responses that came from successful requests */
   values: TData[];
-  /** a value between 0 and 100 which represents the percentage of request that have been completed (whether successfully or not) */
+  /** a value between 0 and 100 which represents the percentage of requests that have been completed (whether successfully or not) */
   percentageLoaded: number;
   /** whether the throttle is currently processing requests */
   loading: boolean;

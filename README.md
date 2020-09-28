@@ -110,7 +110,7 @@ function App() {
 export default App;
 ```
 
-The app that we've built is very simple; it's a button which, when you press it, fires 10,000 HTTP requests in parallel using the [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).  The data being requested in this case is an arbitrary JSON file; the manifest.json in this case.  If you look closely you'll see we're doing some querystring tricks with our URL to avoid getting cached data.
+The app that we've built is very simple; it's a button which, when you press it, fires 10,000 HTTP requests in parallel using the [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).  The data being requested in this case is an arbitrary JSON file; the `manifest.json` in this case.  If you look closely you'll see we're doing some querystring tricks with our URL to avoid getting cached data.
  
 In fact, for this demo we're not interested in the results of these HTTP requests; rather we're interested in how the browser copes with this approach. (Spoiler: not well!) It's worth considering that a browser requesting a text file from the a server running on the same machine as the browser is likely to be as performant as it gets.
 
@@ -126,7 +126,7 @@ In summary, the problems with our current approach are:
 
 1. the browser becoming unresponsive
 2. failing HTTP requests due to insufficient resources
-3. no information displayable to the user around progress
+3. no information displayed to the user around progress
 
 ## Throttle me this
 
@@ -182,7 +182,7 @@ export type ThrottledProgress<TData> = {
   errors: Error[];
   /** the responses that came from successful requests */
   values: TData[];
-  /** a value between 0 and 100 which represents the percentage of request that have been completed (whether successfully or not) */
+  /** a value between 0 and 100 which represents the percentage of requests that have been completed (whether successfully or not) */
   percentageLoaded: number;
   /** whether the throttle is currently processing requests */
   loading: boolean;
@@ -341,6 +341,12 @@ export function useThrottleRequests<TValue>() {
 The `useThrottleRequests` hook returns 2 properties:
 
 - `throttle` - a `ThrottledProgress<TData>` that contains how far through the number of requests being made we are including the responses and errors obtained.
+  - `totalRequests` - the number of requests that will be made
+  - `errors` - the errors that came from failed requests
+  - `values` - the responses that came from successful requests
+  - `percentageLoaded` - a value between 0 and 100 which represents the percentage of request that have been completed (whether successfully or not)
+  - `loading` - whether the throttle is currently processing requests
+
 - `updateThrottle` - an object which exposes 3 functions:
   - `queueRequests` - the function to which you pass the requests that should be queued and executed in a throttled fashion
   - `requestSucceededWithData` - the function which is called if a request succeeds to provide the data
@@ -423,15 +429,7 @@ function App() {
 export default App;
 ```
 
-Looking at the new `use10_000Requests` hook, there's a few subtle differences to our prior implementation.  First of all, we're now exposing the `throttle`; a `ThrottleProgress<TData>` which exposes the following information:
-
-- `totalRequests` - the number of requests that will be made
-- `errors` - the errors that came from failed requests
-- `values` - the responses that came from successful requests
-- `percentageLoaded` - a value between 0 and 100 which represents the percentage of request that have been completed (whether successfully or not)
-- `loading` - whether the throttle is currently processing requests
-
-Our updated hook also exposes a `progressMessage` which is a simple string stored with `useState` that we update as our throttle runs.  In truth the information being surfaced in this case isn't that interesting.  This is in place just to illustrate that you could capture some data from your requests as they complete for display purposes; a running total for instance.
+Looking at the new `use10_000Requests` hook, there's a few subtle differences to our prior implementation.  First of all, we're now exposing the `throttle`; a `ThrottleProgress<TData>`. Our updated hook also exposes a `progressMessage` which is a simple string stored with `useState` that we update as our throttle runs.  In truth the information being surfaced in this case isn't that interesting.  This is in place just to illustrate that you could capture some data from your requests as they complete for display purposes; a running total for instance.
 
 So, how does our new hook approach perform?
 
